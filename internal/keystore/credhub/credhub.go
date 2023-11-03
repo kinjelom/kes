@@ -33,8 +33,8 @@ type Config struct {
 	EnableMutualTls           bool   // If set to true, enables mutual TLS.
 	ClientCertFilePath        string // Path to the client's certificate file used for mutual TLS authentication.
 	ClientKeyFilePath         string // Path to the client's private key file used for mutual TLS authentication.
-	ServerCaCertFilePath      string // Path to the CA certificate file for verifying the CredHub server's certificate.
 	ServerInsecureSkipVerify  bool   // If set to true, server's certificate will not be verified against the provided CA certificate.
+	ServerCaCertFilePath      string // Path to the CA certificate file for verifying the CredHub server's certificate.
 	Namespace                 string // A namespace within CredHub where credentials are stored.
 	ForceBase64ValuesEncoding bool   // If set to true, forces encoding of all the values as base64 before storage.
 }
@@ -92,11 +92,11 @@ func (c *Config) Validate() (*Certs, error) {
 func (c *Config) validatePemFile(path, name string) (pemBytes, derBytes []byte, err error) {
 	pemBytes, err = os.ReadFile(path)
 	if err != nil {
-		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to load PEM file '%s': %v", name, err))
+		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to load PEM file '%s'='%s': %v", name, path, err))
 	}
 	derBlock, _ := pem.Decode(pemBytes)
 	if derBlock == nil {
-		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to decode the '%s' from PEM format: %v", name, err))
+		return pemBytes, nil, errors.New(fmt.Sprintf("credhub config: failed to decode the '%s'='%s' from PEM format, no PEM data found", name, path))
 	}
 	return pemBytes, derBlock.Bytes, nil
 }
