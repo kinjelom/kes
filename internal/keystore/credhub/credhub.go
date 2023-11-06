@@ -156,12 +156,20 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 // If such an entry already exists, Create returns ErrExists.
 //
 // CredHub: there is no method to do it, implemented workaround with limitations
+// Idempotency: this is a success if the key with the same name and value already exists
 func (s *Store) Create(ctx context.Context, name string, value []byte) error {
-	_, err := s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
-		_, err := s.Get(ctx, name)
-		if err == nil {
-			return nil, kv.ErrExists
-		} else if errors.Is(err, kv.ErrNotExists) {
+	keyBytes, err := s.Get(ctx, name)
+	if err == nil {
+		if bytes.Equal(keyBytes, value) {
+			// this key already exists
+			return nil
+		} else {
+			// the key with this name already exists
+			return kv.ErrExists
+		}
+	}
+	_, err = s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
+		if errors.Is(err, kv.ErrNotExists) {
 			return nil, s.put(ctx, name, value)
 		} else {
 			return nil, err
