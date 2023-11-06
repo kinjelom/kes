@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang/groupcache/singleflight"
+	"github.com/minio/kes-go"
 	"io"
 	"net/http"
 	"os"
@@ -160,8 +161,8 @@ func (s *Store) Create(ctx context.Context, name string, value []byte) error {
 	_, err := s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
 		_, err := s.Get(ctx, name)
 		if err == nil {
-			return nil, kv.ErrExists
-		} else if errors.Is(err, kv.ErrNotExists) {
+			return nil, fmt.Errorf("key '%s' already exists: %w", name, kes.ErrKeyExists)
+		} else if errors.Is(err, kes.ErrKeyNotFound) {
 			return nil, s.put(ctx, name, value)
 		} else {
 			return nil, err
@@ -222,7 +223,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, kv.ErrNotExists
+		return nil, kes.ErrKeyNotFound
 	} else if !resp.IsStatusCode2xx() {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to get entry (status: %s, response: %s)", resp.Status, string(bodyBytes))
@@ -260,7 +261,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return kv.ErrNotExists
+		return kes.ErrKeyNotFound
 	} else if !resp.IsStatusCode2xx() {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to delete entry: %s, response: %s", resp.Status, string(bodyBytes))

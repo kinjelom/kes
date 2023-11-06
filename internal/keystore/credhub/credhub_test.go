@@ -4,9 +4,12 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
-	"github.com/minio/kes/kv"
+	"github.com/minio/kes-go"
+	"github.com/minio/kes/internal/api"
 	"io"
+	"net/http"
 	"reflect"
 	"testing"
 )
@@ -123,7 +126,8 @@ func TestStore_Create(t *testing.T) {
 		const key = "key"
 		const value = "string-value"
 		err := store.Create(context.Background(), key, []byte(value))
-		assertEqualComparable(t, err, kv.ErrExists)
+		assertErrorIs(t, err, kes.ErrKeyExists)
+		assertApiErrorStatus(t, err, http.StatusBadRequest)
 	})
 	t.Run("create element that doesn't exist", func(t *testing.T) {
 		fakeClient.respStatusCodes["GET"] = 404
@@ -133,7 +137,7 @@ func TestStore_Create(t *testing.T) {
 		err := store.Create(context.Background(), key, []byte(value))
 		assertNoError(t, err)
 	})
-	t.Run("create element error", func(t *testing.T) {
+	t.Run("create element unknown error", func(t *testing.T) {
 		fakeClient.respStatusCodes["GET"] = 200
 		fakeClient.respBody = existsRespBody
 		fakeClient.respStatusCodes["PUT"] = 500
@@ -154,7 +158,7 @@ func TestStore_Set(t *testing.T) {
 		err := store.Set(context.Background(), key, []byte(value))
 		assertNoError(t, err)
 	})
-	t.Run("set value of element error", func(t *testing.T) {
+	t.Run("set value of element unknown error", func(t *testing.T) {
 		fakeClient.respStatusCodes["PUT"] = 500
 		const key = "key"
 		const value = "string-value"
@@ -214,6 +218,15 @@ func TestStore_Get(t *testing.T) {
 		assertRequest(t, fakeClient, "GET", fmt.Sprintf("/api/v1/data?current=true&name=%s/%s", testNamespace, key))
 		assertEqualBytes(t, value, b)
 	})
+
+	t.Run("GET element that doesn't exist", func(t *testing.T) {
+		fakeClient.respStatusCodes["GET"] = 404
+		const name = "element-name"
+		_, err := store.Get(context.Background(), name)
+		assertErrorIs(t, err, kes.ErrKeyNotFound)
+		assertApiErrorStatus(t, err, http.StatusNotFound)
+	})
+
 }
 
 // `credhub curl -X=DELETE -p "/api/v1/data?name=/test-namespace/element-name"`
@@ -226,6 +239,14 @@ func TestStore_Delete(t *testing.T) {
 		err := store.Delete(context.Background(), name)
 		assertNoError(t, err)
 		assertRequest(t, fakeClient, "DELETE", fmt.Sprintf("/api/v1/data?name=%s/%s", testNamespace, name))
+	})
+
+	t.Run("DELETE element that doesn't exist", func(t *testing.T) {
+		fakeClient.respStatusCodes["DELETE"] = 404
+		const name = "element-name"
+		err := store.Delete(context.Background(), name)
+		assertErrorIs(t, err, kes.ErrKeyNotFound)
+		assertApiErrorStatus(t, err, http.StatusNotFound)
 	})
 }
 
@@ -318,18 +339,40 @@ func assertError(t *testing.T, err error) {
 	}
 }
 
+func assertErrorIs(t *testing.T, err, target error) {
+	if err == nil || target == nil {
+		t.Fatal("error can't be null")
+	}
+	if !errors.Is(err, target) {
+		t.Fatal(fmt.Sprintf("error '%v' isn't '%v'", err, target))
+	}
+}
+
+func assertApiErrorStatus(t *testing.T, err error, status int) {
+	if err == nil {
+		t.Fatal("error can't be null")
+	}
+	apiErr, isIt := api.IsError(err)
+	if !isIt {
+		t.Fatal(fmt.Sprintf("error '%+v' isn't api error '%+v'", err, apiErr))
+	}
+	if apiErr.Status() != status {
+		t.Fatal(fmt.Sprintf("expect error status '%d', got '%d'", status, apiErr.Status()))
+	}
+}
+
 func assertNoError(t *testing.T, err error) {
 	if err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 }
 
-func assertEqualComparable(t *testing.T, expected any, got any) {
+func assertEqualComparable(t *testing.T, expected, got any) {
 	if expected != got {
 		t.Fatalf("expected '%v' got '%v'", expected, got)
 	}
 }
-func assertEqualBytes(t *testing.T, expected []byte, got []byte) {
+func assertEqualBytes(t *testing.T, expected, got []byte) {
 	if !bytes.Equal(expected, got) {
 		t.Fatalf("expected '%v' got '%v'", expected, got)
 	}
