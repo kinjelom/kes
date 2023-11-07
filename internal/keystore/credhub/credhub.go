@@ -14,6 +14,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/golang/groupcache/singleflight"
+	"github.com/minio/kes-go"
 	"io"
 	"net/http"
 	"os"
@@ -156,20 +157,12 @@ func (s *Store) Status(ctx context.Context) (kv.State, error) {
 // If such an entry already exists, Create returns ErrExists.
 //
 // CredHub: there is no method to do it, implemented workaround with limitations
-// Idempotency: this is a success if the key with the same name and value already exists
 func (s *Store) Create(ctx context.Context, name string, value []byte) error {
-	keyBytes, err := s.Get(ctx, name)
-	if err == nil {
-		if bytes.Equal(keyBytes, value) {
-			// this key already exists
-			return nil
-		} else {
-			// the key with this name already exists
-			return kv.ErrExists
-		}
-	}
-	_, err = s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
-		if errors.Is(err, kv.ErrNotExists) {
+	_, err := s.sfGroup.Do(s.config.Namespace+"/"+name, func() (interface{}, error) {
+		_, err := s.Get(ctx, name)
+		if err == nil {
+			return nil, fmt.Errorf("key '%s' already exists: %w", name, kes.ErrKeyExists)
+		} else if errors.Is(err, kes.ErrKeyNotFound) {
 			return nil, s.put(ctx, name, value)
 		} else {
 			return nil, err
@@ -230,7 +223,7 @@ func (s *Store) Get(ctx context.Context, name string) ([]byte, error) {
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return nil, kv.ErrNotExists
+		return nil, kes.ErrKeyNotFound
 	} else if !resp.IsStatusCode2xx() {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return nil, fmt.Errorf("failed to get entry (status: %s, response: %s)", resp.Status, string(bodyBytes))
@@ -268,7 +261,7 @@ func (s *Store) Delete(ctx context.Context, name string) error {
 	}
 
 	if resp.StatusCode == http.StatusNotFound {
-		return kv.ErrNotExists
+		return kes.ErrKeyNotFound
 	} else if !resp.IsStatusCode2xx() {
 		bodyBytes, _ := io.ReadAll(resp.Body)
 		return fmt.Errorf("failed to delete entry: %s, response: %s", resp.Status, string(bodyBytes))
