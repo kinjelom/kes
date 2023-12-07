@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"github.com/minio/kes/internal/keystore/credhub"
+	"github.com/minio/kes/internal/keystore/staticlist"
 	"os"
 	"strings"
 	"time"
@@ -215,6 +216,10 @@ type yml struct {
 			Namespace                 env[string] `yaml:"namespace"`
 			ForceBase64ValuesEncoding env[bool]   `yaml:"force_base64_values_encoding"`
 		} `yaml:"credhub"`
+
+		StaticList *struct {
+			Entries env[map[string]string] `yaml:"entries"`
+		} `yaml:"staticlist"`
 	} `yaml:"keystore"`
 }
 
@@ -690,6 +695,22 @@ func ymlToKeyStore(y *yml) (KeyStore, error) {
 			return nil, err
 		}
 		keystore = &CredHubKeyStore{Config: &config}
+	}
+
+	// Static List
+	if y.KeyStore.StaticList != nil {
+		if keystore != nil {
+			return nil, errors.New("edge: invalid StaticList config: more than once keystore specified")
+		}
+		config := staticlist.Config{
+			Entries: y.KeyStore.StaticList.Entries.Value,
+		}
+		err := config.Validate()
+
+		if err != nil {
+			return nil, err
+		}
+		keystore = &StaticListKeyStore{Config: &config}
 	}
 
 	if keystore == nil {

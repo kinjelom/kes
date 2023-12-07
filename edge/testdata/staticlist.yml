@@ -1,0 +1,12 @@
+version: v1
+
+admin:
+  identity: disabled
+
+tls:
+  key: ./server.key
+  cert: ./server.cert
+
+keystore:
+  staticlist:
+    entries: []

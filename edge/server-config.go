@@ -10,6 +10,7 @@ import (
 	"crypto/x509"
 	"errors"
 	"github.com/minio/kes/internal/keystore/credhub"
+	"github.com/minio/kes/internal/keystore/staticlist"
 	"time"
 
 	"github.com/minio/kes-go"
@@ -730,4 +731,14 @@ func (s *CredHubKeyStore) DescribeEndpoint() string {
 // Connect returns a kv.Store that stores key-value pairs on CredHub.
 func (s *CredHubKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
 	return credhub.NewStore(ctx, s.Config)
+}
+
+// StaticListKeyStore is a structure containing the configuration for StaticList.
+type StaticListKeyStore struct {
+	Config *staticlist.Config
+}
+
+// Connect returns a kv.Store that stores key-value pairs on CredHub.
+func (s *StaticListKeyStore) Connect(ctx context.Context) (kv.Store[string, []byte], error) {
+	return staticlist.NewStore(ctx, s.Config)
 }
